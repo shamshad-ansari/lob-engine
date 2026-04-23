@@ -1,0 +1,41 @@
+plugins {
+    id 'java'
+    id 'me.champeau.jmh' version '0.7.3'
+}
+
+group = 'io.github.shamshadansari'
+version = '1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.lmax:disruptor:3.4.4'
+    implementation 'org.hdrhistogram:HdrHistogram:2.1.12'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.4.11'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+test {
+    useJUnitPlatform()
+    jvmArgs '-XX:-RestrictContended'
+}
+
+jmh {
+    jvmArgs = ['-XX:-RestrictContended', '-XX:+UseG1GC', '-Xmx4g']
+    fork = 2
+    warmupIterations = 5
+    iterations = 10
+    timeUnit = 'ns'
+}
