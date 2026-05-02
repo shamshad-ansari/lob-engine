@@ -35,8 +35,6 @@ test {
 
 jmh {
     jvmArgs = ['-XX:-RestrictContended', '-XX:+UseG1GC', '-Xmx4g']
-    fork = 2
-    warmupIterations = 5
-    iterations = 10
-    timeUnit = 'ns'
+    // fork / iterations / timeUnit intentionally omitted so per-benchmark
+    // annotations (@Fork, @Warmup, @Measurement, @OutputTimeUnit) take effect.
 }
