@@ -47,3 +47,5 @@ Thumbs.db
 # Benchmarks and profiles
 *.jfr
 jmh-result.*
+docs/profiling/jfr_samples.txt
+docs/profiling/jfr-analysis-report.txt
