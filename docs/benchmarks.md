@@ -28,15 +28,6 @@ itself over time. The book accumulates resting orders across iterations because
 `@Setup(Level.Iteration)` resets only the array cursor, not the book state.
 As depth grows, each insertion triggers a more expensive `ArrayList.sort()` over
 an ever-longer list, so later iterations are measurably slower than earlier ones.
-JFR confirms this: 80.8% of sampled CPU stacks passed through the sort path,
-and `TimSort.countRunAndMakeAscending` was the top-of-stack leaf in 59.0% of
-all samples. The wide interval is the signature of that degradation in the raw
-benchmark output.
-
-This behaviour is intentional and left unfixed in the naive layer. It makes the
-baseline a conservative lower bound: the Phase 3 optimized implementation will
-be measured against a book that is already under load, so the improvement ratio
-reflects real-world conditions rather than a cherry-picked shallow-book scenario.
 
 ---
 
@@ -55,11 +46,7 @@ python3 docs/profiling/analyse-jfr.py
 # Output: docs/profiling/jfr-analysis-report.txt
 ```
 
-756 `jdk.ExecutionSample` events from the benchmark worker thread, counted
-by script rather than estimated from flame-graph width. Percentages are
-sampled-stack shares, not exact wall-clock timings.
-
-**Flamegraph (JDK Mission Control — Method Profiling, full view):**
+**Flamegraph (JDK Mission Control):**
 
 ![Naive JFR flamegraph](profiling/assets/naive-jfr-flamegraph.png)
 
