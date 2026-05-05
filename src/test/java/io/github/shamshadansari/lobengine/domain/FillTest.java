@@ -11,6 +11,7 @@ class FillTest {
         Fill fill = new Fill();
 
         fill.fillId = 99L;
+        fill.instrumentId = 7L;
         fill.buyOrderId = 1L;
         fill.sellOrderId = 2L;
         fill.fillPriceTicks = 18949L;
@@ -21,6 +22,7 @@ class FillTest {
         fill.reset();
 
         assertEquals(0L, fill.fillId);
+        assertEquals(0L, fill.instrumentId);
         assertEquals(0L, fill.buyOrderId);
         assertEquals(0L, fill.sellOrderId);
         assertEquals(0L, fill.fillPriceTicks);

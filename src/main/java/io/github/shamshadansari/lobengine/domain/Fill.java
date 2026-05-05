@@ -1,7 +1,8 @@
 package io.github.shamshadansari.lobengine.domain;
 
 public final class Fill {
-    public long    fillId;
+    public long    fillId;          // assigned by engine via sequential counter
+    public long    instrumentId;    // identifies which book produced this fill
     public long    buyOrderId;
     public long    sellOrderId;
     public long    fillPriceTicks;
@@ -15,6 +16,7 @@ public final class Fill {
 
     public void reset() {
         fillId = 0;
+        instrumentId = 0;
         buyOrderId = 0;
         sellOrderId = 0;
         fillPriceTicks = 0;
