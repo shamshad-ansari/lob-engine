@@ -1,8 +1,7 @@
 package io.github.shamshadansari.lobengine.domain;
 
+import io.github.shamshadansari.lobengine.util.DoublyLinkedList;
 import org.junit.jupiter.api.Test;
-
-import java.util.ArrayDeque;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -13,16 +12,18 @@ class OrderTest {
         Order order = new Order();
 
         // Populate every field
-        order.orderId = 42L;
-        order.clientOrderId = "CLIENT-001";
-        order.side = OrderSide.BID;
-        order.type = OrderType.LIMIT;
-        order.priceTicks = 18949L;
-        order.originalQty = 100L;
-        order.remainingQty = 75L;
-        order.status = OrderStatus.PARTIALLY_FILLED;
+        order.orderId        = 42L;
+        order.clientOrderId  = "CLIENT-001";
+        order.side           = OrderSide.BID;
+        order.type           = OrderType.LIMIT;
+        order.priceTicks     = 18949L;
+        order.originalQty    = 100L;
+        order.remainingQty   = 75L;
+        order.status         = OrderStatus.PARTIALLY_FILLED;
         order.timestampNanos = 1_000_000_000L;
-        order.owningQueue = new ArrayDeque<>();
+
+        DoublyLinkedList<Order> list = new DoublyLinkedList<>();
+        order.owningNode = list.addLast(order);
 
         order.reset();
 
@@ -35,6 +36,6 @@ class OrderTest {
         assertEquals(0L, order.remainingQty);
         assertEquals(OrderStatus.PENDING, order.status);
         assertEquals(0L, order.timestampNanos);
-        assertNull(order.owningQueue);
+        assertNull(order.owningNode);
     }
 }
