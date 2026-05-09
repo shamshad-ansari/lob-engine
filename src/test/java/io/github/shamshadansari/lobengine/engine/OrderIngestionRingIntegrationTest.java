@@ -53,9 +53,9 @@ class OrderIngestionRingIntegrationTest {
     @Test
     void publishValidatedNewEventsRestInBook() {
         publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
-        publishAcceptedNew(2L, OrderSide.ASK, OrderType.LIMIT, 50.01, 200L);
+        long sequence = publishAcceptedNew(2L, OrderSide.ASK, OrderType.LIMIT, 50.01, 200L);
 
-        awaitUntil(() -> metrics.ordersProcessed() == 2L);
+        awaitProcessed(sequence);
 
         BookSnapshot snapshot = engine.snapshot();
         assertThat(snapshot.asks).hasSize(2);
@@ -67,13 +67,14 @@ class OrderIngestionRingIntegrationTest {
 
     @Test
     void publishValidatedModifyWithPriceSentinelAppliesQuantityOnlyChange() {
-        publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
-        awaitUntil(() -> metrics.ordersProcessed() == 1L);
+        long newSequence = publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
+        awaitProcessed(newSequence);
 
-        ValidationResult result = ring.publishModify(modifyEvent(1L, -1L, 40L), validator);
+        ValidationResult result = validator.validateModify(modifyEvent(1L, -1L, 40L));
 
         assertThat(result.ok).isTrue();
-        awaitUntil(() -> metrics.ordersProcessed() == 2L);
+        long modifySequence = ring.publishValidated(result.command);
+        awaitProcessed(modifySequence);
 
         BookSnapshot snapshot = engine.snapshot();
         assertThat(snapshot.asks).hasSize(1);
@@ -83,23 +84,24 @@ class OrderIngestionRingIntegrationTest {
 
     @Test
     void publishValidatedCancelRemovesTargetOrder() {
-        publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
-        awaitUntil(() -> metrics.ordersProcessed() == 1L);
+        long newSequence = publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
+        awaitProcessed(newSequence);
 
-        ValidationResult result = ring.publishCancel(cancelEvent(1L), validator);
+        ValidationResult result = validator.validateCancel(cancelEvent(1L));
 
         assertThat(result.ok).isTrue();
+        long cancelSequence = ring.publishValidated(result.command);
         activeOrderIds.remove(1L);
-        awaitUntil(() -> metrics.cancellations() == 1L);
+        awaitProcessed(cancelSequence);
         assertThat(engine.snapshot().hasAsks()).isFalse();
     }
 
     @Test
     void phaseZeroCrossingScenarioRunsThroughRing() {
         publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
-        publishAcceptedNew(2L, OrderSide.BID, OrderType.LIMIT, 51.00, 100L);
+        long sequence = publishAcceptedNew(2L, OrderSide.BID, OrderType.LIMIT, 51.00, 100L);
 
-        awaitUntil(() -> metrics.fillsGenerated() == 1L);
+        awaitProcessed(sequence);
 
         BookSnapshot snapshot = engine.snapshot();
         assertThat(snapshot.hasBids()).isFalse();
@@ -112,9 +114,9 @@ class OrderIngestionRingIntegrationTest {
         publishAcceptedNew(1L, OrderSide.ASK, OrderType.LIMIT, 50.00, 100L);
         publishAcceptedNew(2L, OrderSide.ASK, OrderType.LIMIT, 50.01, 100L);
         publishAcceptedNew(3L, OrderSide.ASK, OrderType.LIMIT, 50.02, 100L);
-        publishAcceptedNew(4L, OrderSide.BID, OrderType.LIMIT, 50.02, 250L);
+        long sequence = publishAcceptedNew(4L, OrderSide.BID, OrderType.LIMIT, 50.02, 250L);
 
-        awaitUntil(() -> metrics.fillsGenerated() == 3L);
+        awaitProcessed(sequence);
 
         BookSnapshot snapshot = engine.snapshot();
         assertThat(metrics.fillsGenerated()).isEqualTo(3L);
@@ -124,11 +126,11 @@ class OrderIngestionRingIntegrationTest {
         assertThat(snapshot.asks.get(0).totalVolume).isEqualTo(50L);
     }
 
-    private void publishAcceptedNew(long orderId, OrderSide side, OrderType type, double price, long qty) {
+    private long publishAcceptedNew(long orderId, OrderSide side, OrderType type, double price, long qty) {
         ValidationResult result = validator.validateNew(submission(orderId, side, type, price, qty));
         assertThat(result.ok).isTrue();
         activeOrderIds.add(orderId);
-        ring.publishValidated(result.command);
+        return ring.publishValidated(result.command);
     }
 
     private OrderSubmission submission(long orderId, OrderSide side, OrderType type, double price, long qty) {
@@ -142,6 +144,10 @@ class OrderIngestionRingIntegrationTest {
             qty,
             1_000L + orderId
         );
+    }
+
+    private void awaitProcessed(long sequence) {
+        awaitUntil(() -> ring.hasProcessed(sequence));
     }
 
     private EngineEvent cancelEvent(long targetOrderId) {

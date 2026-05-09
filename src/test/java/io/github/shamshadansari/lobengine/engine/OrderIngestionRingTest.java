@@ -64,9 +64,9 @@ class OrderIngestionRingTest {
         ring.start();
         ValidationResult result = validator.validateNew(submission(1L, OrderType.LIMIT, 50.00, 100L));
 
-        ring.publishValidated(result.command);
+        long sequence = ring.publishValidated(result.command);
 
-        awaitUntil(() -> metrics.ordersProcessed() == 1L);
+        awaitProcessed(sequence);
         BookSnapshot snapshot = engine.snapshot();
         assertThat(snapshot.asks).hasSize(1);
         assertThat(snapshot.asks.get(0).priceTicks).isEqualTo(5_000L);
@@ -88,14 +88,15 @@ class OrderIngestionRingTest {
     void publishModifyPreservesPriceSentinel() {
         ring.start();
         ValidationResult newResult = validator.validateNew(submission(1L, OrderType.LIMIT, 50.00, 100L));
-        ring.publishValidated(newResult.command);
+        long newSequence = ring.publishValidated(newResult.command);
         activeOrderIds.add(1L);
-        awaitUntil(() -> metrics.ordersProcessed() == 1L);
+        awaitProcessed(newSequence);
 
-        ValidationResult modifyResult = ring.publishModify(modifyEvent(1L, -1L, 40L), validator);
+        ValidationResult modifyResult = validator.validateModify(modifyEvent(1L, -1L, 40L));
 
         assertThat(modifyResult.ok).isTrue();
-        awaitUntil(() -> metrics.ordersProcessed() == 2L);
+        long modifySequence = ring.publishValidated(modifyResult.command);
+        awaitProcessed(modifySequence);
 
         BookSnapshot snapshot = engine.snapshot();
         assertThat(snapshot.asks).hasSize(1);
@@ -106,8 +107,8 @@ class OrderIngestionRingTest {
     @Test
     void shutdownAllowsCleanLifecycleCompletion() {
         ring.start();
-        ring.publishValidated(validator.validateNew(submission(1L, OrderType.LIMIT, 50.00, 100L)).command);
-        awaitUntil(() -> metrics.ordersProcessed() == 1L);
+        long sequence = ring.publishValidated(validator.validateNew(submission(1L, OrderType.LIMIT, 50.00, 100L)).command);
+        awaitProcessed(sequence);
 
         ring.shutdown();
 
@@ -127,6 +128,10 @@ class OrderIngestionRingTest {
             qty,
             1_000L + orderId
         );
+    }
+
+    private void awaitProcessed(long sequence) {
+        awaitUntil(() -> ring.hasProcessed(sequence));
     }
 
     private EngineEvent modifyEvent(long targetOrderId, long newPriceTicks, long newQty) {

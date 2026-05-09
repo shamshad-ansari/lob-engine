@@ -1,7 +1,6 @@
 package io.github.shamshadansari.lobengine.engine;
 
 import com.lmax.disruptor.BlockingWaitStrategy;
-import com.lmax.disruptor.EventTranslatorOneArg;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
@@ -15,9 +14,6 @@ import java.util.Objects;
 import java.util.concurrent.ThreadFactory;
 
 public final class OrderIngestionRing implements AutoCloseable {
-
-    private static final EventTranslatorOneArg<EngineEvent, ValidatedOrderCommand> COMMAND_TRANSLATOR =
-        (event, sequence, command) -> copyCommand(command, event);
 
     private final Disruptor<EngineEvent> disruptor;
 
@@ -51,12 +47,22 @@ public final class OrderIngestionRing implements AutoCloseable {
         started = true;
     }
 
-    public void publishValidated(ValidatedOrderCommand command) {
+    public long publishValidated(ValidatedOrderCommand command) {
         Objects.requireNonNull(command, "command");
         if (!started) {
             throw new IllegalStateException("OrderIngestionRing must be started before publishing");
         }
-        ringBuffer.publishEvent(COMMAND_TRANSLATOR, command);
+        long sequence = ringBuffer.next();
+        try {
+            copyCommand(command, ringBuffer.get(sequence));
+        } finally {
+            ringBuffer.publish(sequence);
+        }
+        return sequence;
+    }
+
+    public boolean hasProcessed(long sequence) {
+        return started && ringBuffer.getMinimumGatingSequence() >= sequence;
     }
 
     public ValidationResult publishNew(OrderSubmission submission, OrderValidator validator) {

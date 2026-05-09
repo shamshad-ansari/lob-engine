@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,11 +48,19 @@ class OrderIngestionRingConcurrentProducerTest {
             ring.start();
             CountDownLatch startSignal = new CountDownLatch(1);
             List<Future<?>> futures = new ArrayList<>();
+            AtomicLong maxPublishedSequence = new AtomicLong(-1L);
 
             for (int producerId = 0; producerId < 4; producerId++) {
                 int capturedProducerId = producerId;
                 futures.add(producers.submit(
-                    () -> publishProducerOrders(capturedProducerId, validator, activeOrderIds, ring, startSignal)
+                    () -> publishProducerOrders(
+                        capturedProducerId,
+                        validator,
+                        activeOrderIds,
+                        ring,
+                        startSignal,
+                        maxPublishedSequence
+                    )
                 ));
             }
 
@@ -62,12 +71,13 @@ class OrderIngestionRingConcurrentProducerTest {
                 future.get();
             }
 
-            awaitUntil(() -> metrics.ordersProcessed() == 400L);
+            awaitUntil(() -> ring.hasProcessed(maxPublishedSequence.get()));
 
             BookSnapshot snapshot = engine.snapshot();
             assertThat(snapshot.hasBids()).isFalse();
             assertThat(snapshot.asks).hasSize(400);
             assertThat(snapshot.asks.stream().mapToLong(level -> level.totalVolume).sum()).isEqualTo(40_000L);
+            assertThat(metrics.ordersProcessed()).isEqualTo(400L);
         } finally {
             producers.shutdownNow();
             ring.shutdown();
@@ -78,7 +88,8 @@ class OrderIngestionRingConcurrentProducerTest {
                                        OrderValidator validator,
                                        Set<Long> activeOrderIds,
                                        OrderIngestionRing ring,
-                                       CountDownLatch startSignal) {
+                                       CountDownLatch startSignal,
+                                       AtomicLong maxPublishedSequence) {
         awaitStart(startSignal);
 
         for (int sequence = 0; sequence < 100; sequence++) {
@@ -87,7 +98,8 @@ class OrderIngestionRingConcurrentProducerTest {
             ValidationResult result = validator.validateNew(submission(orderId, price));
             assertThat(result.ok).isTrue();
             activeOrderIds.add(orderId);
-            ring.publishValidated(result.command);
+            long publishedSequence = ring.publishValidated(result.command);
+            maxPublishedSequence.accumulateAndGet(publishedSequence, Math::max);
         }
     }
 
