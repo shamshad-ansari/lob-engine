@@ -1,17 +1,20 @@
 package io.github.shamshadansari.lobengine.engine;
 
 import io.github.shamshadansari.lobengine.BookSnapshot;
+import io.github.shamshadansari.lobengine.domain.BookUpdate;
 import io.github.shamshadansari.lobengine.domain.EngineEvent;
 import io.github.shamshadansari.lobengine.domain.Fill;
 import io.github.shamshadansari.lobengine.domain.Order;
 import io.github.shamshadansari.lobengine.domain.OrderSide;
 import io.github.shamshadansari.lobengine.domain.OrderType;
+import io.github.shamshadansari.lobengine.marketdata.MarketDataPublisher;
 import io.github.shamshadansari.lobengine.metrics.EngineMetrics;
 import io.github.shamshadansari.lobengine.pool.FillPool;
 import io.github.shamshadansari.lobengine.pool.OrderPool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,6 +132,29 @@ class MatchingEngineTest {
 
         pooledEngine.processEvent(cancel(resting.orderId));
         assertThat(orderPool.available()).isEqualTo(1);
+    }
+
+    @Test
+    void injectedPublisherReceivesFeedEventsThroughProcessEvent() {
+        MarketDataPublisher publisher = new MarketDataPublisher();
+        MatchingEngine feedEngine = new MatchingEngine(INSTRUMENT_ID, metrics, publisher);
+        List<BookUpdate.Type> updateTypes = new ArrayList<>();
+        List<Long> updateVolumes = new ArrayList<>();
+        List<Long> fillInstrumentIds = new ArrayList<>();
+
+        publisher.addBookUpdateListener(update -> {
+            updateTypes.add(update.updateType);
+            updateVolumes.add(update.newVolumeAtLevel);
+        });
+        publisher.addFillListener(fill -> fillInstrumentIds.add(fill.instrumentId));
+
+        feedEngine.processEvent(newOrder(OrderSide.ASK, OrderType.LIMIT, 5000, 100));
+        List<Fill> fills = feedEngine.processEvent(newOrder(OrderSide.BID, OrderType.LIMIT, 5000, 100));
+
+        assertThat(fills).hasSize(1);
+        assertThat(fillInstrumentIds).containsExactly(INSTRUMENT_ID);
+        assertThat(updateTypes).containsExactly(BookUpdate.Type.ADD, BookUpdate.Type.TRADE);
+        assertThat(updateVolumes).containsExactly(100L, -1L);
     }
 
     private EngineEvent newOrder(OrderSide side, OrderType orderType, long priceTicks, long qty) {
