@@ -51,16 +51,16 @@ python3 docs/profiling/analyse-jfr.py
 ![Naive JFR flamegraph](profiling/assets/naive-jfr-flamegraph.png)
 
 JMC renders this bottom-up: `Thread.run()` is the root at the bottom and the
-leaf methods actually burning CPU are at the top. Reading upward from
+leaf methods consuming CPU are at the top. Reading upward from
 `NaiveThroughputBenchmark.naiveProcess()`, the frame splits at
 `NaiveOrderBook.processLimit()` into two branches:
 
 - **Wide left branch (~81% of stacks):** `ArrayList.sort()` calls `Arrays.sort()`
-  calls `TimSort.sort()` calls `TimSort.countRunAndMakeAscending()`, which fans
-  out into the comparator lambda chain at the top. `TimSort.sort` appeared in
+  calls `TimSort.sort()` calls `TimSort.countRunAndMakeAscending()`, which then
+  enters the comparator lambda chain at the top. `TimSort.sort` appeared in
   609 of 756 samples (80.6% inclusive). `TimSort.countRunAndMakeAscending` was
   the top-of-stack leaf in 446 samples (59.0% exclusive), meaning it was the
-  method directly burning CPU more than half the time.
+  method directly consuming CPU more than half the time.
 
 - **Narrow right branch (~18% of stacks):** `cancel()` calls `removeById()`,
   appearing in 139 of 756 samples (18.4%). The overlap between the two branches
@@ -104,3 +104,74 @@ O(1). Given that 80.8% of sampled stacks pass through the sorting path and the
 replacement reduces that cost from O(N log N) over all resting orders to O(log L)
 over price levels, the expected improvement is 20-40x, scaling with book depth
 at measurement time.
+
+---
+
+## Phase 4 — Object Pool
+
+**Hardware:** Apple M4, MacBook Air, 16 GB RAM
+
+**JVM:** Java 21.0.5 (HotSpot 64-bit), `-XX:-RestrictContended -XX:+UseG1GC -Xmx4g`
+
+**Workload:** 60% limit orders, 20% market orders, 20% cancel operations, prices
+clustered within +/-10 ticks around mid 5000. The optimized benchmark uses
+primitive operation templates, acquires incoming orders from `OrderPool`, releases
+caller-owned incoming orders after processing, and releases returned fills back to
+`FillPool` after consumption.
+
+**Benchmark config:** `@Fork(1)`, `@Warmup(3 x 2 s)`, `@Measurement(5 x 3 s)`
+
+**Result:** ~13,192,062 ops/sec
+
+```text
+Benchmark                                       Mode  Cnt         Score        Error  Units
+NaiveThroughputBenchmark.naiveProcess          thrpt    5     71877.823 +/-  44466.012  ops/s
+OrderBookThroughputBenchmark.optimizedProcess  thrpt    5  13192062.173 +/- 523903.834  ops/s
+```
+
+The optimized `OrderBook` is roughly 183x faster than the naive baseline in this
+run. The main improvement still comes from the earlier structural changes
+(`TreeMap` price levels, `HashMap` order index, O(1) queue removal), while Phase 4
+removes `Order` and `Fill` allocation from the matching hot path.
+
+**GC check:** direct JMH jar run with `-verbose:gc`, shortened to
+`-wi 1 -w 1 -i 3 -r 1 -f 1` so the GC output is readable:
+
+```bash
+java -XX:-RestrictContended -XX:+UseG1GC -Xmx4g -verbose:gc \
+  -jar build/libs/lob-matching-engine-1.0-SNAPSHOT-jmh.jar \
+  "OrderBookThroughputBenchmark.optimizedProcess" \
+  -wi 1 -w 1 -i 3 -r 1 -f 1
+```
+
+```text
+# VM options: -XX:-RestrictContended -XX:+UseG1GC -Xmx4g -verbose:gc
+# Warmup: 1 iterations, 1 s each
+# Measurement: 3 iterations, 1 s each
+
+Iteration   1:
+[1.622s][info][gc] GC(10) Pause Young (Normal) (G1 Evacuation Pause) 1607M->348M(2104M) 2.447ms
+[2.173s][info][gc] GC(11) Pause Young (Normal) (G1 Evacuation Pause) 1606M->348M(2104M) 2.259ms
+13442580.195 ops/s
+Iteration   2:
+[2.716s][info][gc] GC(12) Pause Young (Normal) (G1 Evacuation Pause) 1606M->348M(2104M) 2.673ms
+13793986.647 ops/s
+Iteration   3:
+[3.272s][info][gc] GC(13) Pause Young (Normal) (G1 Evacuation Pause) 1606M->349M(2104M) 3.271ms
+[3.826s][info][gc] GC(14) Pause Young (Normal) (G1 Evacuation Pause) 1607M->349M(2104M) 3.250ms
+13698354.391 ops/s
+
+Benchmark                                       Mode  Cnt         Score         Error  Units
+OrderBookThroughputBenchmark.optimizedProcess  thrpt    3  13644973.744 +/- 3314575.833  ops/s
+```
+
+Young GCs are still visible during measurement, but they are no longer caused by
+`new Order()` or `new Fill()` in `OrderBook`'s matching path. The Phase 4 grep
+gate is clean for `src/main/java/io/github/shamshadansari/lobengine/book`.
+Construction-time `new Order()` and `new Fill()` remain only inside the pool
+package, where they prewarm or refill exhausted pools.
+
+Remaining allocation sources are expected and deferred by the Phase 4 spec:
+`new ArrayList<>()` for each returned fills list, JMH benchmark scaffolding,
+occasional `HashMap`/`TreeMap` internal growth, and snapshot allocations
+(`BookSnapshot`/`BookLevel`) for snapshot-heavy workloads.
