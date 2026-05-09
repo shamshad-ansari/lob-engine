@@ -6,6 +6,7 @@ import io.github.shamshadansari.lobengine.domain.EngineEvent;
 import io.github.shamshadansari.lobengine.domain.Fill;
 import io.github.shamshadansari.lobengine.domain.Order;
 import io.github.shamshadansari.lobengine.domain.OrderStatus;
+import io.github.shamshadansari.lobengine.marketdata.MarketDataPublisher;
 import io.github.shamshadansari.lobengine.metrics.EngineMetrics;
 import io.github.shamshadansari.lobengine.pool.FillPool;
 import io.github.shamshadansari.lobengine.pool.OrderPool;
@@ -24,13 +25,26 @@ public final class MatchingEngine {
         this(instrumentId, metrics, new OrderPool(10_000), new FillPool(50_000));
     }
 
+    public MatchingEngine(long instrumentId, EngineMetrics metrics, MarketDataPublisher publisher) {
+        this(instrumentId, metrics, new OrderPool(10_000), new FillPool(50_000), publisher);
+    }
+
     public MatchingEngine(long instrumentId, EngineMetrics metrics, OrderPool orderPool, FillPool fillPool) {
+        this(instrumentId, metrics, orderPool, fillPool, new MarketDataPublisher());
+    }
+
+    public MatchingEngine(long instrumentId,
+                          EngineMetrics metrics,
+                          OrderPool orderPool,
+                          FillPool fillPool,
+                          MarketDataPublisher publisher) {
         this(instrumentId,
              orderPool,
              new OrderBook(instrumentId,
                            Objects.requireNonNull(metrics, "metrics"),
                            Objects.requireNonNull(orderPool, "orderPool"),
-                           Objects.requireNonNull(fillPool, "fillPool")));
+                           Objects.requireNonNull(fillPool, "fillPool"),
+                           Objects.requireNonNull(publisher, "publisher")));
     }
 
     public MatchingEngine(long instrumentId, OrderPool orderPool, OrderBook orderBook) {

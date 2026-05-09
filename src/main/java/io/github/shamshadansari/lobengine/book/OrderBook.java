@@ -2,11 +2,13 @@ package io.github.shamshadansari.lobengine.book;
 
 import io.github.shamshadansari.lobengine.BookSnapshot;
 import io.github.shamshadansari.lobengine.domain.BookLevel;
+import io.github.shamshadansari.lobengine.domain.BookUpdate;
 import io.github.shamshadansari.lobengine.domain.Fill;
 import io.github.shamshadansari.lobengine.domain.Order;
 import io.github.shamshadansari.lobengine.domain.OrderSide;
 import io.github.shamshadansari.lobengine.domain.OrderStatus;
 import io.github.shamshadansari.lobengine.domain.OrderType;
+import io.github.shamshadansari.lobengine.marketdata.MarketDataPublisher;
 import io.github.shamshadansari.lobengine.metrics.EngineMetrics;
 import io.github.shamshadansari.lobengine.pool.FillPool;
 import io.github.shamshadansari.lobengine.pool.OrderPool;
@@ -27,6 +29,7 @@ public final class OrderBook {
     private final EngineMetrics             metrics;
     private final OrderPool                 orderPool;
     private final FillPool                  fillPool;
+    private final MarketDataPublisher       publisher;
 
     private long bestBidTicks = Long.MIN_VALUE;
     private long bestAskTicks = Long.MAX_VALUE;
@@ -38,17 +41,30 @@ public final class OrderBook {
     private long nextInternalId = 1_000_000_000L;
 
     public OrderBook(long instrumentId, EngineMetrics metrics) {
-        this(instrumentId, metrics, new OrderPool(10_000), new FillPool(50_000));
+        this(instrumentId, metrics, new MarketDataPublisher());
+    }
+
+    public OrderBook(long instrumentId, EngineMetrics metrics, MarketDataPublisher publisher) {
+        this(instrumentId, metrics, new OrderPool(10_000), new FillPool(50_000), publisher);
     }
 
     public OrderBook(long instrumentId, EngineMetrics metrics, OrderPool orderPool, FillPool fillPool) {
+        this(instrumentId, metrics, orderPool, fillPool, new MarketDataPublisher());
+    }
+
+    public OrderBook(long instrumentId,
+                     EngineMetrics metrics,
+                     OrderPool orderPool,
+                     FillPool fillPool,
+                     MarketDataPublisher publisher) {
         this.instrumentId = instrumentId;
-        this.orderPool    = orderPool;
-        this.fillPool     = fillPool;
+        this.orderPool    = Objects.requireNonNull(orderPool, "orderPool");
+        this.fillPool     = Objects.requireNonNull(fillPool, "fillPool");
         this.bids         = new TreeMap<>(Comparator.reverseOrder());
         this.asks         = new TreeMap<>();
         this.orderIndex   = new HashMap<>(500_000);
-        this.metrics      = metrics;
+        this.metrics      = Objects.requireNonNull(metrics, "metrics");
+        this.publisher    = Objects.requireNonNull(publisher, "publisher");
     }
 
     // -------------------------------------------------------------------------
@@ -70,6 +86,7 @@ public final class OrderBook {
         level.enqueue(order);                   // Sets order.owningNode for O(1) cancel via node reference.
         orderIndex.put(order.orderId, order);
         updateCacheForSide(order.side);
+        publishBookUpdate(BookUpdate.Type.ADD, order.side, order.priceTicks, level.totalVolume());
     }
 
     // O(1) HashMap lookup, O(log N) TreeMap lookup for the PriceLevel, O(1) DLL splice-out via owningNode.
@@ -85,10 +102,12 @@ public final class OrderBook {
         PriceLevel level = sideMap(order.side).get(order.priceTicks);
         if (level != null) {
             level.removeOrder(order);           // O(1) via owningNode; nulls owningNode
+            long newVolumeAtLevel = level.isEmpty() ? -1L : level.totalVolume();
             if (level.isEmpty()) {
                 sideMap(order.side).remove(order.priceTicks);
                 updateCacheForSide(order.side);
             }
+            publishBookUpdate(BookUpdate.Type.CANCEL, order.side, order.priceTicks, newVolumeAtLevel);
         }
 
         order.status = OrderStatus.CANCELLED;
@@ -129,6 +148,8 @@ public final class OrderBook {
                 opposite.remove(bestPrice);
                 if (incoming.side == OrderSide.BID) updateBestAskCache();
                 else                                 updateBestBidCache();
+                OrderSide restingSide = incoming.side == OrderSide.BID ? OrderSide.ASK : OrderSide.BID;
+                publishBookUpdate(BookUpdate.Type.TRADE, restingSide, bestPrice, -1L);
             }
         }
 
@@ -178,7 +199,13 @@ public final class OrderBook {
             if (effectiveQty < existing.remainingQty) {
                 long delta = effectiveQty - existing.remainingQty;  // negative
                 PriceLevel level = sideMap(existing.side).get(existing.priceTicks);
-                if (level != null) level.adjustVolume(delta);
+                if (level != null) {
+                    level.adjustVolume(delta);
+                    publishBookUpdate(BookUpdate.Type.MODIFY,
+                                      existing.side,
+                                      existing.priceTicks,
+                                      level.totalVolume());
+                }
                 existing.remainingQty = effectiveQty;
             }
             return existing;
@@ -247,6 +274,8 @@ public final class OrderBook {
                 opposite.remove(bestOpposite);
                 if (incoming.side == OrderSide.BID) updateBestAskCache();
                 else                                 updateBestBidCache();
+                OrderSide restingSide = incoming.side == OrderSide.BID ? OrderSide.ASK : OrderSide.BID;
+                publishBookUpdate(BookUpdate.Type.TRADE, restingSide, bestOpposite, -1L);
             }
         }
     }
@@ -256,6 +285,7 @@ public final class OrderBook {
             Order resting   = level.peekFront();
             long  fillQty   = Math.min(incoming.remainingQty, resting.remainingQty);
             long  fillPrice = resting.priceTicks;
+            OrderSide restingSide = resting.side;
 
             Fill fill = fillPool.acquire();
             fill.fillId          = nextFillId++;
@@ -284,8 +314,19 @@ public final class OrderBook {
                 ? OrderStatus.FILLED : OrderStatus.PARTIALLY_FILLED;
 
             fills.add(fill);
+            publisher.publishFill(fill);
+            if (!level.isEmpty()) {
+                publishBookUpdate(BookUpdate.Type.TRADE, restingSide, fillPrice, level.totalVolume());
+            }
             metrics.recordFills(1);
         }
+    }
+
+    private void publishBookUpdate(BookUpdate.Type type,
+                                   OrderSide side,
+                                   long priceTicks,
+                                   long newVolumeAtLevel) {
+        publisher.publishBookUpdate(type, instrumentId, side, priceTicks, newVolumeAtLevel);
     }
 
     private TreeMap<Long, PriceLevel> sideMap(OrderSide side) {
