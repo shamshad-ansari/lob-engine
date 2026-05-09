@@ -14,7 +14,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * T-025 — processModify: FIFO-preserving qty-down semantics and cancel-and-resubmit paths.
+ * Verifies modify-order behavior for in-place updates, cancel-and-resubmit paths,
+ * and sentinel values used by validated modify commands.
  */
 class ModificationTest {
 
@@ -30,9 +31,7 @@ class ModificationTest {
         book    = new OrderBook(INSTRUMENT_ID, metrics);
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
+    // Test data helpers.
 
     private Order ask(long priceTicks, long qty) {
         return order(OrderSide.ASK, priceTicks, qty);
@@ -54,9 +53,7 @@ class ModificationTest {
         return o;
     }
 
-    // =========================================================================
-    // M-01 — Qty-down in-place: queue position preserved, level volume updated
-    // =========================================================================
+    // Quantity reduction is applied in place and preserves FIFO priority.
 
     @Test
     void M01_qtyDown_inPlace_queuePositionPreserved() {
@@ -66,22 +63,18 @@ class ModificationTest {
         book.addToBook(first);
         book.addToBook(second);
 
-        // Reducing first's quantity from 100 to 40 in place preserves its queue position ahead of second.
         Order result = book.processModify(first.orderId, 5000, 40);
 
         assertThat(result).isSameAs(first);
         assertThat(first.remainingQty).isEqualTo(40L);
-        assertThat(first.owningNode).isNotNull();   // Order remains in the queue.
+        assertThat(first.owningNode).isNotNull();
 
-        // An incoming bid for 40 must fill the in-place modified order, not second.
         List<Fill> fills = book.processLimit(bid(5000, 40));
         assertThat(fills).hasSize(1);
         assertThat(fills.get(0).sellOrderId).isEqualTo(firstOrderId);
     }
 
-    // =========================================================================
-    // M-02 — Qty-down in-place: level totalVolume updated correctly
-    // =========================================================================
+    // Quantity reduction updates the price level's aggregate volume.
 
     @Test
     void M02_qtyDown_levelVolumeUpdated() {
@@ -89,37 +82,31 @@ class ModificationTest {
 
         book.processModify(nextId - 1, 5000, 80);
 
-        // The snapshot must reflect the reduced level volume after the in-place modification.
         var snap = book.getSnapshot();
         assertThat(snap.asks).hasSize(1);
         assertThat(snap.asks.get(0).totalVolume).isEqualTo(80L);
     }
 
-    // =========================================================================
-    // M-03 — Price change: cancel-and-resubmit, old order owningNode null, new at new price
-    // =========================================================================
+    // Repricing an order removes the original queue entry and submits a replacement.
 
     @Test
     void M03_priceChange_cancelAndResubmit_oldOwningNodeNull_newOrderAtNewPrice() {
         Order original = ask(5000, 100);
         book.addToBook(original);
 
-        // Repricing from 5000 to 5001 triggers cancel-and-resubmit semantics.
         Order replacement = book.processModify(original.orderId, 5001, 100);
 
         assertThat(replacement).isNotSameAs(original);
-        assertThat(original.owningNode).isNull();           // Original order has been removed from the 5000 queue.
+        assertThat(original.owningNode).isNull();
 
-        assertThat(replacement.owningNode).isNotNull();     // Replacement order is placed in the 5001 queue.
+        assertThat(replacement.owningNode).isNotNull();
         assertThat(replacement.priceTicks).isEqualTo(5001L);
 
         assertThat(book.bestAsk()).isEqualTo(5001L);
         assertThat(book.hasAsks()).isTrue();
     }
 
-    // =========================================================================
-    // M-04 — Qty-up: cancel-and-resubmit (loses queue priority)
-    // =========================================================================
+    // Quantity increases lose priority through cancel-and-resubmit semantics.
 
     @Test
     void M04_qtyUp_cancelAndResubmit_losesQueuePriority() {
@@ -129,7 +116,6 @@ class ModificationTest {
         book.addToBook(first);
         book.addToBook(second);
 
-        // Increasing quantity triggers cancel-and-resubmit, moving the order to the back of the queue.
         Order replacement = book.processModify(first.orderId, 5000, 200);
 
         assertThat(replacement).isNotSameAs(first);
@@ -137,15 +123,12 @@ class ModificationTest {
         assertThat(replacement.owningNode).isNotNull();
         assertThat(replacement.remainingQty).isEqualTo(200L);
 
-        // The second order fills before the replacement because it retains queue priority after resubmission.
         List<Fill> fills = book.processLimit(bid(5000, 100));
         assertThat(fills).hasSize(1);
         assertThat(fills.get(0).sellOrderId).isEqualTo(secondOrderId);
     }
 
-    // =========================================================================
-    // M-05 — Modify non-existent orderId: returns null
-    // =========================================================================
+    // Missing order IDs are treated as modify misses.
 
     @Test
     void M05_modifyNonExistentOrder_returnsNull() {
@@ -156,9 +139,7 @@ class ModificationTest {
         assertThat(book.hasAsks()).isFalse();
     }
 
-    // =========================================================================
-    // M-06 — Same price, same qty: no-op; queue position and volume unchanged
-    // =========================================================================
+    // Unchanged price and quantity produce a no-op.
 
     @Test
     void M06_samePriceSameQty_isNoOp_queuePositionAndVolumeUnchanged() {
@@ -168,18 +149,111 @@ class ModificationTest {
         book.addToBook(first);
         book.addToBook(second);
 
-        // Modifying with identical price and quantity must be a no-op.
         Order result = book.processModify(first.orderId, 5000, 100);
 
         assertThat(result).isSameAs(first);
-        assertThat(first.remainingQty).isEqualTo(100L);     // Quantity is unchanged.
-        assertThat(first.owningNode).isNotNull();           // Order remains in the queue after a no-op modification.
+        assertThat(first.remainingQty).isEqualTo(100L);
+        assertThat(first.owningNode).isNotNull();
 
-        // Level volume must be unchanged at 100 + 100 = 200.
         var snap = book.getSnapshot();
         assertThat(snap.asks.get(0).totalVolume).isEqualTo(200L);
 
-        // Queue position is preserved; first fills before second.
+        List<Fill> fills = book.processLimit(bid(5000, 100));
+        assertThat(fills).hasSize(1);
+        assertThat(fills.get(0).sellOrderId).isEqualTo(firstOrderId);
+    }
+
+    // A price sentinel keeps the original price for quantity-only reductions.
+
+    @Test
+    void M07_priceSentinelQtyDown_preservesPriceAndQueuePosition() {
+        Order first  = ask(5000, 100);
+        Order second = ask(5000, 100);
+        long firstOrderId = first.orderId;
+        book.addToBook(first);
+        book.addToBook(second);
+
+        Order result = book.processModify(first.orderId, -1L, 40);
+
+        assertThat(result).isSameAs(first);
+        assertThat(first.priceTicks).isEqualTo(5000L);
+        assertThat(first.remainingQty).isEqualTo(40L);
+
+        var snap = book.getSnapshot();
+        assertThat(snap.asks).hasSize(1);
+        assertThat(snap.asks.get(0).priceTicks).isEqualTo(5000L);
+        assertThat(snap.asks.get(0).totalVolume).isEqualTo(140L);
+
+        List<Fill> fills = book.processLimit(bid(5000, 40));
+        assertThat(fills).hasSize(1);
+        assertThat(fills.get(0).sellOrderId).isEqualTo(firstOrderId);
+    }
+
+    // A price sentinel keeps the original price when quantity-up resubmits.
+
+    @Test
+    void M08_priceSentinelQtyUp_cancelAndResubmitAtOriginalPrice() {
+        Order first  = ask(5000, 100);
+        Order second = ask(5000, 100);
+        long secondOrderId = second.orderId;
+        book.addToBook(first);
+        book.addToBook(second);
+
+        Order replacement = book.processModify(first.orderId, -1L, 200);
+
+        assertThat(replacement).isNotSameAs(first);
+        assertThat(first.owningNode).isNull();
+        assertThat(replacement.priceTicks).isEqualTo(5000L);
+        assertThat(replacement.remainingQty).isEqualTo(200L);
+        assertThat(book.bestAsk()).isEqualTo(5000L);
+
+        List<Fill> fills = book.processLimit(bid(5000, 100));
+        assertThat(fills).hasSize(1);
+        assertThat(fills.get(0).sellOrderId).isEqualTo(secondOrderId);
+    }
+
+    // A quantity sentinel keeps the original quantity when the price changes.
+
+    @Test
+    void M09_qtySentinelPriceChange_cancelAndResubmitWithOriginalQuantity() {
+        Order original = ask(5000, 100);
+        book.addToBook(original);
+
+        Order replacement = book.processModify(original.orderId, 5001, -1L);
+
+        assertThat(replacement).isNotSameAs(original);
+        assertThat(original.owningNode).isNull();
+        assertThat(replacement.priceTicks).isEqualTo(5001L);
+        assertThat(replacement.remainingQty).isEqualTo(100L);
+        assertThat(replacement.originalQty).isEqualTo(100L);
+
+        var snap = book.getSnapshot();
+        assertThat(snap.asks).hasSize(1);
+        assertThat(snap.asks.get(0).priceTicks).isEqualTo(5001L);
+        assertThat(snap.asks.get(0).totalVolume).isEqualTo(100L);
+    }
+
+    // Dual sentinels are a no-op at the book layer.
+
+    @Test
+    void M10_priceAndQtySentinels_isNoOp() {
+        Order first  = ask(5000, 100);
+        Order second = ask(5000, 100);
+        long firstOrderId = first.orderId;
+        book.addToBook(first);
+        book.addToBook(second);
+
+        Order result = book.processModify(first.orderId, -1L, -1L);
+
+        assertThat(result).isSameAs(first);
+        assertThat(first.priceTicks).isEqualTo(5000L);
+        assertThat(first.remainingQty).isEqualTo(100L);
+        assertThat(first.owningNode).isNotNull();
+
+        var snap = book.getSnapshot();
+        assertThat(snap.asks).hasSize(1);
+        assertThat(snap.asks.get(0).totalVolume).isEqualTo(200L);
+
         List<Fill> fills = book.processLimit(bid(5000, 100));
         assertThat(fills).hasSize(1);
         assertThat(fills.get(0).sellOrderId).isEqualTo(firstOrderId);

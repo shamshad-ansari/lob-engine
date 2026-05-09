@@ -169,15 +169,17 @@ public final class OrderBook {
         Order existing = orderIndex.get(orderId);
         if (existing == null) return null;
 
-        boolean priceUnchanged = (newPriceTicks == existing.priceTicks);
+        long effectivePriceTicks = newPriceTicks == -1L ? existing.priceTicks : newPriceTicks;
+        long effectiveQty        = newQty == -1L ? existing.remainingQty : newQty;
+        boolean priceUnchanged   = (effectivePriceTicks == existing.priceTicks);
 
-        if (priceUnchanged && newQty <= existing.remainingQty) {
+        if (priceUnchanged && effectiveQty <= existing.remainingQty) {
             // Same price, qty unchanged or reduced: mutate in place to preserve queue priority.
-            if (newQty < existing.remainingQty) {
-                long delta = newQty - existing.remainingQty;  // negative
+            if (effectiveQty < existing.remainingQty) {
+                long delta = effectiveQty - existing.remainingQty;  // negative
                 PriceLevel level = sideMap(existing.side).get(existing.priceTicks);
                 if (level != null) level.adjustVolume(delta);
-                existing.remainingQty = newQty;
+                existing.remainingQty = effectiveQty;
             }
             return existing;
         }
@@ -193,9 +195,9 @@ public final class OrderBook {
         replacement.clientOrderId  = savedClientOrderId;
         replacement.side           = savedSide;
         replacement.type           = savedType;
-        replacement.priceTicks     = newPriceTicks;
-        replacement.originalQty    = newQty;
-        replacement.remainingQty   = newQty;
+        replacement.priceTicks     = effectivePriceTicks;
+        replacement.originalQty    = effectiveQty;
+        replacement.remainingQty   = effectiveQty;
         replacement.status         = OrderStatus.PENDING;
         replacement.timestampNanos = System.nanoTime();
         addToBook(replacement);
