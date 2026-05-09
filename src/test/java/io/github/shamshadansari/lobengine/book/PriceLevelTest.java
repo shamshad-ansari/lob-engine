@@ -114,10 +114,13 @@ class PriceLevelTest {
     }
 
     @Test
-    void dequeueFront_decrementsTotalVolume() {
-        level.enqueue(order(1, 10));
+    void dequeueFront_callerAdjustsVolumeFirst_totalVolumeConsistent() {
+        Order a = order(1, 10);
+        level.enqueue(a);
         level.enqueue(order(2, 20));
 
+        // Per the dequeueFront contract, adjustVolume must be called before the structural removal.
+        level.adjustVolume(-a.remainingQty);
         level.dequeueFront();
 
         assertThat(level.totalVolume()).isEqualTo(20);
@@ -126,7 +129,10 @@ class PriceLevelTest {
 
     @Test
     void dequeueFront_emptyLevelAfterAllRemoved() {
-        level.enqueue(order(1, 5));
+        Order o = order(1, 5);
+        level.enqueue(o);
+
+        level.adjustVolume(-o.remainingQty);    // Adjust volume first, per the dequeueFront contract.
         level.dequeueFront();
 
         assertThat(level.isEmpty()).isTrue();
@@ -140,7 +146,7 @@ class PriceLevelTest {
     @Test
     void removeOrder_returnsFalseWhenOwningNodeIsNull() {
         Order o = order(1, 10);
-        // owningNode is null — never enqueued
+        // Order was never enqueued; owningNode is null.
         assertThat(level.removeOrder(o)).isFalse();
     }
 
@@ -148,7 +154,7 @@ class PriceLevelTest {
     void removeOrder_returnsFalseForAlreadyRemovedOrder() {
         Order o = order(1, 10);
         level.enqueue(o);
-        level.dequeueFront();           // owningNode nulled by dequeueFront
+        level.dequeueFront();           // dequeueFront clears owningNode, simulating match-driven removal.
 
         assertThat(level.removeOrder(o)).isFalse();
     }
@@ -167,7 +173,7 @@ class PriceLevelTest {
         assertThat(result).isTrue();
         assertThat(b.owningNode).isNull();
 
-        // Remaining FIFO order should be A then C
+        // Remaining queue must contain A then C in FIFO order.
         List<Order> remaining = new ArrayList<>();
         for (Order o : level.queueView()) remaining.add(o);
         assertThat(remaining).containsExactly(a, c);
@@ -205,12 +211,12 @@ class PriceLevelTest {
         Order b = order(2, 20);
         Order c = order(3, 30);
 
-        level.enqueue(a);   // vol = 10
-        level.enqueue(b);   // vol = 30
-        level.enqueue(c);   // vol = 60
+        level.enqueue(a);   // totalVolume = 10
+        level.enqueue(b);   // totalVolume = 30
+        level.enqueue(c);   // totalVolume = 60
 
-        level.dequeueFront();   // removes a, vol = 50
-        level.removeOrder(c);   // removes c, vol = 20
+        level.adjustVolume(-a.remainingQty); level.dequeueFront();   // Removes a; totalVolume = 50.
+        level.removeOrder(c);                                        // Removes c; totalVolume = 20.
 
         assertThat(level.totalVolume()).isEqualTo(20);
         assertThat(level.size()).isEqualTo(1);
