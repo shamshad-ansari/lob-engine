@@ -1,0 +1,160 @@
+[
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.OrderBookThroughputBenchmark.engineReusableFillList",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-reusable-fills-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 7577800.934442457,
+            "scoreError" : 146019.99630200642,
+            "scoreConfidence" : [
+                7431780.93814045,
+                7723820.930744464
+            ],
+            "scorePercentiles" : {
+                "0.0" : 7003294.4279389735,
+                "50.0" : 7612216.266709659,
+                "90.0" : 7804670.433513967,
+                "95.0" : 7838919.797359286,
+                "99.0" : 7841932.72715375,
+                "99.9" : 7841932.72715375,
+                "99.99" : 7841932.72715375,
+                "99.999" : 7841932.72715375,
+                "99.9999" : 7841932.72715375,
+                "100.0" : 7841932.72715375
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    7321122.227154028,
+                    7442231.958111097,
+                    7003294.4279389735,
+                    7598974.921865317,
+                    7630673.749985285,
+                    7413093.498007981,
+                    7625457.611554002,
+                    7471174.222841018
+                ],
+                [
+                    7580407.09453228,
+                    7719262.940353387,
+                    7722309.491219364,
+                    7829881.007975892,
+                    7841932.72715375,
+                    7742737.094683175,
+                    7779459.859052042,
+                    7690753.572721793
+                ],
+                [
+                    7403296.670706475,
+                    7449323.353112927,
+                    7487400.636341708,
+                    7484747.105067383,
+                    7520165.074277126,
+                    7723897.282875655,
+                    7669832.366054816,
+                    7715793.533033494
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.OrderBookThroughputBenchmark.orderBookReusableFillList",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-reusable-fills-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 7974301.813630697,
+            "scoreError" : 129385.60486636107,
+            "scoreConfidence" : [
+                7844916.208764336,
+                8103687.418497059
+            ],
+            "scorePercentiles" : {
+                "0.0" : 7578606.7906158,
+                "50.0" : 8005858.835612845,
+                "90.0" : 8150406.392362893,
+                "95.0" : 8170425.21210555,
+                "99.0" : 8173776.745968055,
+                "99.9" : 8173776.745968055,
+                "99.99" : 8173776.745968055,
+                "99.999" : 8173776.745968055,
+                "99.9999" : 8173776.745968055,
+                "100.0" : 8173776.745968055
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    7973881.65025978,
+                    8097375.3485442195,
+                    8001341.83935086,
+                    7578606.7906158,
+                    7710083.610637728,
+                    7990177.569727399,
+                    8160370.6105180355,
+                    7642523.683554325
+                ],
+                [
+                    7922588.792550647,
+                    8069088.782492653,
+                    7894703.748143745,
+                    7850888.200640967,
+                    7942987.2046146775,
+                    8111143.902833919,
+                    8134194.789293737,
+                    8072458.589122986
+                ],
+                [
+                    8018408.999143412,
+                    8106203.885372215,
+                    8127367.968959299,
+                    7725008.657173546,
+                    8010375.83187483,
+                    7929244.151536172,
+                    8173776.745968055,
+                    8140442.174207751
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+

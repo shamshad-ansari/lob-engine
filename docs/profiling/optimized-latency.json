@@ -1,0 +1,316 @@
+[
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.LatencyDistributionBenchmark.engineCurrentAllocatingLatency",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-latency-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 6103993.032103743,
+            "scoreError" : 54944.92804968063,
+            "scoreConfidence" : [
+                6049048.104054063,
+                6158937.960153424
+            ],
+            "scorePercentiles" : {
+                "0.0" : 5868989.378036173,
+                "50.0" : 6128811.753543161,
+                "90.0" : 6166234.338048236,
+                "95.0" : 6186848.831519632,
+                "99.0" : 6193158.5693602115,
+                "99.9" : 6193158.5693602115,
+                "99.99" : 6193158.5693602115,
+                "99.999" : 6193158.5693602115,
+                "99.9999" : 6193158.5693602115,
+                "100.0" : 6193158.5693602115
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6193158.5693602115,
+                    6074861.235532975,
+                    6131538.606599301,
+                    6143854.79740541,
+                    6146455.497914201,
+                    6125952.508171218,
+                    6124221.723759094,
+                    6079062.832512409
+                ],
+                [
+                    6158845.563052339,
+                    6126084.900487021,
+                    6005117.319513157,
+                    6062493.200362384,
+                    5868989.378036173,
+                    6029235.989429841,
+                    6014992.9872745825,
+                    6056047.083083572
+                ],
+                [
+                    6139891.84987512,
+                    6167919.617997891,
+                    6140740.444163889,
+                    6150536.584217394,
+                    6156074.0204735985,
+                    6164549.058098582,
+                    6092485.918957708,
+                    6142723.084211758
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.LatencyDistributionBenchmark.engineReusableFillListLatency",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-latency-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 6101841.303590085,
+            "scoreError" : 45631.591785327975,
+            "scoreConfidence" : [
+                6056209.711804758,
+                6147472.895375413
+            ],
+            "scorePercentiles" : {
+                "0.0" : 5980351.474400726,
+                "50.0" : 6101072.494159797,
+                "90.0" : 6158952.206186779,
+                "95.0" : 6247031.589693688,
+                "99.0" : 6275601.895404994,
+                "99.9" : 6275601.895404994,
+                "99.99" : 6275601.895404994,
+                "99.999" : 6275601.895404994,
+                "99.9999" : 6275601.895404994,
+                "100.0" : 6275601.895404994
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6058783.419158779,
+                    6150190.657189209,
+                    6127415.761400736,
+                    6145032.735198242,
+                    6083834.402340784,
+                    6133496.10039618,
+                    6064976.748321299,
+                    5980351.474400726
+                ],
+                [
+                    6275601.895404994,
+                    6026620.022201931,
+                    6124540.108058934,
+                    6116207.372914902,
+                    6133955.516438784,
+                    6161320.67255977,
+                    6063633.290002681,
+                    6156583.739813789
+                ],
+                [
+                    6087802.519412773,
+                    6116353.019629218,
+                    6106975.828920333,
+                    6045751.053218357,
+                    6090773.08401148,
+                    6095169.159399261,
+                    6018007.436920625,
+                    6080815.268848276
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.LatencyDistributionBenchmark.orderBookCurrentAllocatingLatency",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-latency-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 6393659.541230064,
+            "scoreError" : 137781.99463254373,
+            "scoreConfidence" : [
+                6255877.54659752,
+                6531441.535862608
+            ],
+            "scorePercentiles" : {
+                "0.0" : 5885158.679579328,
+                "50.0" : 6426761.191949347,
+                "90.0" : 6577673.170287473,
+                "95.0" : 6591908.854844744,
+                "99.0" : 6592523.604624847,
+                "99.9" : 6592523.604624847,
+                "99.99" : 6592523.604624847,
+                "99.999" : 6592523.604624847,
+                "99.9999" : 6592523.604624847,
+                "100.0" : 6592523.604624847
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6407537.820523742,
+                    5885158.679579328,
+                    6147475.0485247625,
+                    6300724.58582376,
+                    6265718.309125658,
+                    6089226.41864959,
+                    6340054.463021835,
+                    6291899.461227884
+                ],
+                [
+                    6371505.985368634,
+                    6555280.630223422,
+                    6295327.576310988,
+                    6445984.5633749515,
+                    6592523.604624847,
+                    6543251.7335287,
+                    6590064.605504437,
+                    6565281.735070509
+                ],
+                [
+                    6307586.960086358,
+                    6305002.020400998,
+                    6509818.0642899,
+                    6514507.136361093,
+                    6533752.166951237,
+                    6537714.767167859,
+                    6519952.614639194,
+                    6532480.039141827
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.36",
+        "benchmark" : "io.github.shamshadansari.lobengine.benchmarks.LatencyDistributionBenchmark.orderBookReusableFillListLatency",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 3,
+        "jvm" : "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC",
+            "-Xms4g",
+            "-Xmx4g",
+            "-Xlog:gc*,safepoint:file=docs/profiling/optimized-new-latency-gc-safepoint.log:tags,uptime,time,level"
+        ],
+        "jdkVersion" : "21.0.5",
+        "vmName" : "Java HotSpot(TM) 64-Bit Server VM",
+        "vmVersion" : "21.0.5+9-LTS-239",
+        "warmupIterations" : 5,
+        "warmupTime" : "2 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 8,
+        "measurementTime" : "3 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 6737241.069173072,
+            "scoreError" : 86263.63885112392,
+            "scoreConfidence" : [
+                6650977.430321949,
+                6823504.708024196
+            ],
+            "scorePercentiles" : {
+                "0.0" : 6486976.952484981,
+                "50.0" : 6746853.729736016,
+                "90.0" : 6870486.188912746,
+                "95.0" : 6878608.992944404,
+                "99.0" : 6880020.822647896,
+                "99.9" : 6880020.822647896,
+                "99.99" : 6880020.822647896,
+                "99.999" : 6880020.822647896,
+                "99.9999" : 6880020.822647896,
+                "100.0" : 6880020.822647896
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6515549.396474202,
+                    6813771.7442693645,
+                    6705333.72095282,
+                    6744634.437511195,
+                    6808497.35669653,
+                    6742861.606744605,
+                    6670935.036665923,
+                    6809223.475514618
+                ],
+                [
+                    6486976.952484981,
+                    6556359.4131246805,
+                    6781032.34001451,
+                    6722566.652244099,
+                    6732073.3067266615,
+                    6587359.403701723,
+                    6749073.021960837,
+                    6789234.243998164
+                ],
+                [
+                    6637478.658404888,
+                    6866598.873991565,
+                    6714929.285379855,
+                    6880020.822647896,
+                    6874373.503833927,
+                    6857272.460198199,
+                    6820725.382971761,
+                    6826904.563640739
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+
