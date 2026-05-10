@@ -5,11 +5,11 @@ import io.github.shamshadansari.lobengine.domain.EngineEvent;
 import io.github.shamshadansari.lobengine.domain.Fill;
 import io.github.shamshadansari.lobengine.domain.Order;
 import io.github.shamshadansari.lobengine.domain.OrderStatus;
-import io.github.shamshadansari.lobengine.domain.OrderType;
 import io.github.shamshadansari.lobengine.engine.MatchingEngine;
 import io.github.shamshadansari.lobengine.metrics.EngineMetrics;
 import io.github.shamshadansari.lobengine.pool.FillPool;
 import io.github.shamshadansari.lobengine.pool.OrderPool;
+import org.HdrHistogram.Histogram;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -20,6 +20,7 @@ import org.openjdk.jmh.annotations.OutputTimeUnit;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -33,78 +34,105 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 8, time = 1)
 @Fork(3)
-public class OrderBookThroughputBenchmark {
+public class LatencyDistributionBenchmark {
 
     private static final int WORKLOAD_SIZE = 1_000_000;
     private static final long ORDER_ID_STRIDE = 10_000_000_000L;
-    private static final long SEED = 42L;
-    private static final int ORDER_POOL_SIZE = 2_000_000;
-    private static final int FILL_POOL_SIZE = 2_000_000;
+    private static final int POOL_SIZE = 2_000_000;
 
+    private MarketMicrostructureSimulator.EventSpec[] events;
     private OrderBook book;
     private MatchingEngine engine;
     private OrderPool orderPool;
-    private FillPool  fillPool;
-    private FillPool  engineFillPool;
-
-    private MarketMicrostructureSimulator.EventSpec[] events;
-    private ArrayList<Fill> reusableFills;
+    private FillPool fillPool;
+    private FillPool engineFillPool;
     private EngineEvent reusableEvent;
+    private ArrayList<Fill> reusableFills;
+    private Histogram orderBookCurrentHistogram;
+    private Histogram orderBookReusableHistogram;
+    private Histogram engineCurrentHistogram;
+    private Histogram engineReusableHistogram;
     private long idx;
 
     @Setup(Level.Trial)
     public void setupTrial() {
-        events = MarketMicrostructureSimulator.generate(WORKLOAD_SIZE, SEED).events();
-        reusableFills = new ArrayList<>(8);
+        events = MarketMicrostructureSimulator.generate(WORKLOAD_SIZE, 42L).events();
         reusableEvent = new EngineEvent();
+        reusableFills = new ArrayList<>(8);
+        orderBookCurrentHistogram = new Histogram(TimeUnit.SECONDS.toNanos(1), 3);
+        orderBookReusableHistogram = new Histogram(TimeUnit.SECONDS.toNanos(1), 3);
+        engineCurrentHistogram = new Histogram(TimeUnit.SECONDS.toNanos(1), 3);
+        engineReusableHistogram = new Histogram(TimeUnit.SECONDS.toNanos(1), 3);
     }
 
     // Reset book/pool state every iteration so each iteration measures steady-state on a
-    // fresh book. Without this, resting orders accumulate across iterations and the heap
-    // fills, producing a monotonic throughput collapse instead of a representative score.
+    // fresh book instead of a heap that grows across the whole run. Histograms accumulate
+    // across iterations to keep enough samples for tail percentiles.
     @Setup(Level.Iteration)
     public void setupIteration() {
         idx = 0;
-        orderPool = new OrderPool(ORDER_POOL_SIZE);
-        fillPool  = new FillPool(FILL_POOL_SIZE);
-        book      = new OrderBook(1L, new EngineMetrics(), orderPool, fillPool);
-        OrderPool engineOrderPool = new OrderPool(ORDER_POOL_SIZE);
-        engineFillPool = new FillPool(FILL_POOL_SIZE);
-        engine    = new MatchingEngine(1L,
-                                       new EngineMetrics(),
-                                       engineOrderPool,
-                                       engineFillPool);
+        orderPool = new OrderPool(POOL_SIZE);
+        fillPool = new FillPool(POOL_SIZE);
+        book = new OrderBook(MarketMicrostructureSimulator.DEFAULT_INSTRUMENT_ID,
+                             new EngineMetrics(),
+                             orderPool,
+                             fillPool);
+
+        OrderPool engineOrderPool = new OrderPool(POOL_SIZE);
+        engineFillPool = new FillPool(POOL_SIZE);
+        engine = new MatchingEngine(MarketMicrostructureSimulator.DEFAULT_INSTRUMENT_ID,
+                                    new EngineMetrics(),
+                                    engineOrderPool,
+                                    engineFillPool);
     }
 
     @Benchmark
-    public void orderBookCurrentAllocating(Blackhole bh) {
-        long sequence = idx++;
-        processOrderBook(events[(int) (sequence % events.length)], sequence / events.length, true, bh);
-    }
-
-    @Benchmark
-    public void orderBookReusableFillList(Blackhole bh) {
-        long sequence = idx++;
-        processOrderBook(events[(int) (sequence % events.length)], sequence / events.length, false, bh);
-    }
-
-    @Benchmark
-    public void engineCurrentAllocating(Blackhole bh) {
+    public void orderBookCurrentAllocatingLatency(Blackhole bh) {
         long sequence = idx++;
         MarketMicrostructureSimulator.EventSpec spec = events[(int) (sequence % events.length)];
+        long start = System.nanoTime();
+        processOrderBook(spec, sequence / events.length, true, bh);
+        orderBookCurrentHistogram.recordValue(System.nanoTime() - start);
+    }
+
+    @Benchmark
+    public void orderBookReusableFillListLatency(Blackhole bh) {
+        long sequence = idx++;
+        MarketMicrostructureSimulator.EventSpec spec = events[(int) (sequence % events.length)];
+        long start = System.nanoTime();
+        processOrderBook(spec, sequence / events.length, false, bh);
+        orderBookReusableHistogram.recordValue(System.nanoTime() - start);
+    }
+
+    @Benchmark
+    public void engineCurrentAllocatingLatency(Blackhole bh) {
+        long sequence = idx++;
+        MarketMicrostructureSimulator.EventSpec spec = events[(int) (sequence % events.length)];
+        long start = System.nanoTime();
         List<Fill> fills = engine.processEvent(toEngineEvent(spec, sequence / events.length, reusableEvent));
+        engineCurrentHistogram.recordValue(System.nanoTime() - start);
         bh.consume(fills.size());
         releaseFills(fills, engineFillPool, bh);
     }
 
     @Benchmark
-    public void engineReusableFillList(Blackhole bh) {
+    public void engineReusableFillListLatency(Blackhole bh) {
         long sequence = idx++;
         MarketMicrostructureSimulator.EventSpec spec = events[(int) (sequence % events.length)];
+        long start = System.nanoTime();
         List<Fill> fills = engine.processEvent(toEngineEvent(spec, sequence / events.length, reusableEvent), reusableFills);
+        engineReusableHistogram.recordValue(System.nanoTime() - start);
         bh.consume(fills.size());
         releaseFills(fills, engineFillPool, bh);
         reusableFills.clear();
+    }
+
+    @TearDown(Level.Trial)
+    public void printHistograms() {
+        printHistogram("orderBookCurrentAllocating", orderBookCurrentHistogram);
+        printHistogram("orderBookReusableFillList", orderBookReusableHistogram);
+        printHistogram("engineCurrentAllocating", engineCurrentHistogram);
+        printHistogram("engineReusableFillList", engineReusableHistogram);
     }
 
     private void processOrderBook(MarketMicrostructureSimulator.EventSpec spec,
@@ -113,17 +141,26 @@ public class OrderBookThroughputBenchmark {
                                   Blackhole bh) {
         long idOffset = cycle * ORDER_ID_STRIDE;
         switch (spec.kind) {
-            case NEW -> processNewOrder(spec, idOffset, allocating, bh);
+            case NEW -> processNew(spec, idOffset, allocating, bh);
             case CANCEL -> bh.consume(book.cancelOrder(spec.targetOrderId + idOffset));
             case MODIFY -> bh.consume(book.processModify(spec.targetOrderId + idOffset, spec.newPriceTicks, spec.newQty));
         }
     }
 
-    private void processNewOrder(MarketMicrostructureSimulator.EventSpec spec,
-                                 long idOffset,
-                                 boolean allocating,
-                                 Blackhole bh) {
-        Order order = acquireOrder(spec, idOffset);
+    private void processNew(MarketMicrostructureSimulator.EventSpec spec,
+                            long idOffset,
+                            boolean allocating,
+                            Blackhole bh) {
+        Order order = orderPool.acquire();
+        order.orderId = spec.orderId + idOffset;
+        order.side = spec.side;
+        order.type = spec.type;
+        order.priceTicks = spec.priceTicks;
+        order.originalQty = spec.qty;
+        order.remainingQty = spec.qty;
+        order.status = OrderStatus.PENDING;
+        order.timestampNanos = spec.timestampNanos;
+
         List<Fill> fills;
         if (allocating) {
             fills = switch (spec.type) {
@@ -144,26 +181,12 @@ public class OrderBookThroughputBenchmark {
         bh.consume(order.status);
         bh.consume(fills.size());
         releaseFills(fills, fillPool, bh);
-
         if (order.owningNode == null) {
             orderPool.release(order);
         }
         if (!allocating) {
             reusableFills.clear();
         }
-    }
-
-    private Order acquireOrder(MarketMicrostructureSimulator.EventSpec spec, long idOffset) {
-        Order order = orderPool.acquire();
-        order.orderId        = spec.orderId + idOffset;
-        order.side           = spec.side;
-        order.type           = spec.type;
-        order.priceTicks     = spec.priceTicks;
-        order.originalQty    = spec.qty;
-        order.remainingQty   = spec.qty;
-        order.status         = OrderStatus.PENDING;
-        order.timestampNanos = spec.timestampNanos;
-        return order;
     }
 
     private void releaseFills(List<Fill> fills, FillPool sourcePool, Blackhole bh) {
@@ -200,5 +223,17 @@ public class OrderBookThroughputBenchmark {
             }
         }
         return event;
+    }
+
+    private void printHistogram(String name, Histogram histogram) {
+        System.out.printf(
+            "%s latency nanos: samples=%d p50=%d p90=%d p99=%d p99.9=%d max=%d%n",
+            name,
+            histogram.getTotalCount(),
+            histogram.getValueAtPercentile(50.0),
+            histogram.getValueAtPercentile(90.0),
+            histogram.getValueAtPercentile(99.0),
+            histogram.getValueAtPercentile(99.9),
+            histogram.getMaxValue());
     }
 }
