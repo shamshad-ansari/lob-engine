@@ -125,6 +125,5 @@ src/
 docs/
   benchmarks.md          Full benchmark log with all runs
   run-benchmarks.md      Benchmark runbook
-  latency-distribution.md Latency percentile records
   profiling/             JFR recordings, GC logs, allocation samples
 ```
